@@ -1,418 +1,67 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Headway Analysis Dashboard</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+e2E85PxpoBv7gSHfj4pQpS5P5b4SpuF5V0rF2z2M=" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o+6EVS+G8CBOAXgQw0MS5Lt5h7iB0hSGNS1Zj+ZxKdM=" crossorigin=""></script>
-  <script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 0;
-      background: #0f172a;
-    }
-
-    .sidebar {
-      background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
-      padding: 24px;
-      border-right: 1px solid rgba(148, 163, 184, 0.12);
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    .sidebar h1 {
-      margin: 0;
-      font-size: 1.35rem;
-      letter-spacing: 0.01em;
-    }
-
-    .sidebar p {
-      margin: 8px 0 0;
-      color: #94a3b8;
-      line-height: 1.6;
-    }
-
-    .upload-card,
-    .status-card {
-      background: #111827;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      border-radius: 18px;
-      padding: 18px;
-      display: grid;
-      gap: 14px;
-    }
-
-    .upload-card label {
-      display: block;
-      font-size: 0.95rem;
-      margin-bottom: 6px;
-      color: #cbd5e1;
-    }
-
-    .upload-card input[type=file] {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(148, 163, 184, 0.24);
-      background: #0f172a;
-      color: #e2e8f0;
-    }
-
-    .upload-card button {
-      width: 100%;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: none;
-      background: #2563eb;
-      color: #f8fafc;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s ease;
-    }
-
-    .upload-card button:hover {
-      background: #1d4ed8;
-    }
-
-    .file-info {
-      font-size: 0.9rem;
-      color: #94a3b8;
-      margin-top: 6px;
-    }
-
-    .content {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 22px;
-      background: #020617;
-    }
-
-    .panel {
-      background: #111827;
-      border: 1px solid rgba(148, 163, 184, 0.10);
-      border-radius: 24px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .panel-header {
-      padding: 18px 22px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .panel-header h2 {
-      margin: 0;
-      font-size: 1rem;
-      color: #f8fafc;
-    }
-
-    .panel-header span {
-      font-size: 0.85rem;
-      color: #94a3b8;
-    }
-
-    #map {
-      min-height: 420px;
-      width: 100%;
-    }
-
-    .charts {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
-    }
-
-    .chart-panel {
-      min-height: 320px;
-    }
-
-    .chart-placeholder {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #94a3b8;
-      font-size: 0.95rem;
-      height: 100%;
-    }
-
-    @media (max-width: 1200px) {
-      body {
-        grid-template-columns: 1fr;
-      }
-      .sidebar {
-        border-right: none;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-      }
-      .charts {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morning Commute Analysis</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 </head>
 <body>
-  <aside class="sidebar">
-    <div>
-      <h1>Headway Analyzer</h1>
-      <p>Upload your GTFS route package and simulation output to visualize worst-case headways and distribution box plots.</p>
+    <div class="container">
+        <header>
+            <h1>Morning Commute Analysis</h1>
+        </header>
+
+        <main>
+            <!-- File Upload Section -->
+            <section class="upload-section">
+                <h2>Upload GTFS Data</h2>
+                <div class="form-group">
+                    <label for="gtfs-file">Select GTFS ZIP File:</label>
+                    <input 
+                        type="file" 
+                        id="gtfs-file" 
+                        accept=".zip" 
+                        required
+                    >
+                </div>
+                <div id="upload-status" class="status-message"></div>
+            </section>
+
+            <!-- Route Selection Section -->
+            <section class="route-section" id="route-section" style="display: none;">
+                <h2>Select Route</h2>
+                <div class="form-group">
+                    <label for="route-select">Route:</label>
+                    <select id="route-select">
+                        <option value="">-- Choose a route --</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Stops Configuration Section -->
+            <section class="stops-section" id="stops-section" style="display: none;">
+                <h2>Configure Stops</h2>
+                <div id="stops-container" class="stops-container"></div>
+            </section>
+
+            <!-- Analyze Button -->
+            <section class="analyze-section" id="analyze-section" style="display: none;">
+                <button id="analyze-btn" class="btn-primary">Analyze</button>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <h2>Headway Analysis</h2>
+                <div class="chart-container">
+                    <canvas id="headway-chart"></canvas>
+                </div>
+            </section>
+        </main>
     </div>
 
-    <div class="upload-card">
-      <label for="gtfsUpload">GTFS ZIP</label>
-      <input id="gtfsUpload" type="file" accept=".zip" />
-      <button id="gtfsUploadButton" type="button">Load GTFS ZIP</button>
-      <div id="gtfsInfo" class="file-info">No file uploaded</div>
-    </div>
-
-    <div class="upload-card">
-      <label for="dataUpload">Data ZIP</label>
-      <input id="dataUpload" type="file" accept=".zip" />
-      <div id="dataInfo" class="file-info">No file uploaded</div>
-    </div>
-
-    <div class="status-card">
-      <div>
-        <h2>Status</h2>
-        <p>Upload both archives to enable route parsing and simulation visualization.</p>
-      </div>
-      <div class="file-info" id="statusText">Waiting for upload</div>
-    </div>
-  </aside>
-
-  <main class="content">
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Route Map</h2>
-          <span>Upper left-hand visualization of the selected route.</span>
-        </div>
-      </div>
-      <div id="map"></div>
-    </section>
-
-    <section class="charts">
-      <div class="panel chart-panel">
-        <div class="panel-header">
-          <h2>Headway Bounds</h2>
-          <span>Estimated min/max headways on the route.</span>
-        </div>
-        <div id="headwayChart" style="flex: 1; min-height: 280px;"></div>
-      </div>
-
-      <div class="panel chart-panel">
-        <div class="panel-header">
-          <h2>Simulated Distribution</h2>
-          <span>Box plots of simulated headway outcomes.</span>
-        </div>
-        <div id="boxplotChart" style="flex: 1; min-height: 280px;"></div>
-      </div>
-    </section>
-  </main>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('DOM ready, initializing page');
-
-      let map = null;
-      try {
-        map = L.map('map', {
-          center: [37.77, -122.42],
-          zoom: 12,
-          zoomControl: true,
-        });
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          maxZoom: 19,
-        }).addTo(map);
-      } catch (error) {
-        console.error('Leaflet map initialization failed:', error);
-        const mapEl = document.getElementById('map');
-        if (mapEl) {
-          mapEl.textContent = 'Map failed to initialize.';
-        }
-      }
-
-      const gtfsInput = document.getElementById('gtfsUpload');
-      const gtfsUploadButton = document.getElementById('gtfsUploadButton');
-      const dataInput = document.getElementById('dataUpload');
-      const gtfsInfo = document.getElementById('gtfsInfo');
-      const dataInfo = document.getElementById('dataInfo');
-      const statusText = document.getElementById('statusText');
-
-    function updateStatus() {
-      const gtfsUploaded = gtfsInput.files.length > 0;
-      const dataUploaded = dataInput.files.length > 0;
-      statusText.textContent = gtfsUploaded && dataUploaded ? 'Both files uploaded. Ready to parse.' : 'Waiting for upload';
-    }
-
-    function formatFile(file) {
-      return `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
-    }
-
-    dataInput.addEventListener('change', () => {
-      if (dataInput.files.length > 0) {
-        dataInfo.textContent = formatFile(dataInput.files[0]);
-      } else {
-        dataInfo.textContent = 'No file uploaded';
-      }
-      updateStatus();
-    });
-
-    function parseCsvText(text) {
-      const result = Papa.parse(text, {
-        header: true,
-        skipEmptyLines: true,
-      });
-      if (result.errors.length > 0) {
-        console.warn('CSV parse errors', result.errors);
-      }
-      return result.data;
-    }
-
-    async function loadGtfsZip(file) {
-      console.log('loadGtfsZip starting', file);
-      if (typeof JSZip === 'undefined') {
-        console.error('JSZip is not loaded');
-        statusText.textContent = 'JSZip library failed to load. Check network or console for details.';
-        return;
-      }
-      statusText.textContent = 'Unzipping GTFS archive...';
-      const requiredFiles = [
-        'agency.txt',
-        'calendar_dates.txt',
-        'calendar.txt',
-        'routes.txt',
-        'shapes.txt',
-        'stops.txt',
-        'stop_times.txt',
-        'trips.txt',
-      ];
-
-      try {
-        const zip = await JSZip.loadAsync(file);
-        const tables = {};
-        for (const filename of requiredFiles) {
-          const entry = zip.file(filename);
-          if (!entry) {
-            statusText.textContent = `Missing required file: ${filename}`;
-            return;
-          }
-          const text = await entry.async('text');
-          tables[filename.replace('.txt', '')] = parseCsvText(text);
-        }
-
-        statusText.textContent = 'GTFS loaded successfully.';
-        load_gtfs(tables);
-      } catch (error) {
-        console.error(error);
-        statusText.textContent = 'Failed to parse GTFS zip. Check console for details.';
-      }
-    }
-
-    function load_gtfs(tables) {
-      console.log('load_gtfs called with tables:', tables);
-      // stub: implement GTFS analysis logic here
-    }
-
-    gtfsInput.addEventListener('change', () => {
-      if (gtfsInput.files.length > 0) {
-        gtfsInfo.textContent = formatFile(gtfsInput.files[0]);
-      } else {
-        gtfsInfo.textContent = 'No file uploaded';
-      }
-      updateStatus();
-    });
-
-    gtfsUploadButton.addEventListener('click', () => {
-      console.log('GTFS upload button clicked');
-      if (gtfsInput.files.length === 0) {
-        statusText.textContent = 'Please select a GTFS zip file first.';
-        return;
-      }
-      loadGtfsZip(gtfsInput.files[0]);
-    });
-
-    function renderCharts() {
-      const x = ['Start', 'Segment 1', 'Segment 2', 'Segment 3', 'End'];
-      const lowerBound = [5, 7, 6, 8, 7];
-      const upperBound = [12, 14, 13, 15, 14];
-
-      const headwayTrace1 = {
-        x,
-        y: lowerBound,
-        name: 'Lower bound',
-        type: 'scatter',
-        mode: 'lines+markers',
-        line: { color: '#38bdf8' },
-      };
-
-      const headwayTrace2 = {
-        x,
-        y: upperBound,
-        name: 'Upper bound',
-        type: 'scatter',
-        mode: 'lines+markers',
-        line: { color: '#a78bfa' },
-      };
-
-      Plotly.newPlot('headwayChart', [headwayTrace1, headwayTrace2], {
-        margin: { t: 30, b: 40, l: 40, r: 20 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(17,24,39,0.9)',
-        font: { color: '#e2e8f0' },
-        xaxis: { title: 'Route segment' },
-        yaxis: { title: 'Headway (minutes)' },
-      }, {responsive: true});
-
-      const boxTrace = {
-        y: [
-          [6, 7, 5, 8, 6, 7, 9, 10, 7],
-          [10, 12, 11, 13, 14, 12, 15, 16, 13],
-          [7, 9, 8, 10, 7, 8, 11, 12, 9],
-        ],
-        type: 'box',
-        name: 'Distribution samples',
-        marker: { color: '#f97316' },
-        boxpoints: 'suspectedoutliers',
-      };
-
-      Plotly.newPlot('boxplotChart', [boxTrace], {
-        margin: { t: 30, b: 40, l: 40, r: 20 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(17,24,39,0.9)',
-        font: { color: '#e2e8f0' },
-        yaxis: { title: 'Minutes between vehicles' },
-      }, {responsive: true});
-    }
-
-    renderCharts();
-    console.log('Page initialized');
-  });
-  </script>
+    <script src="app.js"></script>
 </body>
 </html>
