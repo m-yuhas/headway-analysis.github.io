@@ -1,67 +1,965 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Morning Commute Analysis</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transit Holding Policy Optimizer</title>
+<style>
+  /* ---- Palette (dataviz reference instance) ---- */
+  :root{
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --surface-2:#f2f1ec;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6;  /* worst-case (blue)  */
+    --series-2:#eb6834;  /* best-case  (orange)*/
+    --good:#0ca30c; --accent:#2a78d6;
+    --shadow:0 1px 2px rgba(11,11,11,.05),0 4px 16px rgba(11,11,11,.06);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+      --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+      --series-1:#3987e5; --series-2:#d95926;
+      --good:#0ca30c; --accent:#3987e5;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#242422;
+    --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5; --series-2:#d95926;
+    --good:#0ca30c; --accent:#3987e5;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--page); color:var(--ink);
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:0 0 80px;
+  }
+  header{
+    padding:28px 24px 20px; max-width:1180px; margin:0 auto;
+    display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;
+  }
+  header .title{flex:1 1 400px}
+  h1{font-size:22px; margin:0 0 4px; letter-spacing:-.01em}
+  header p{margin:0; color:var(--ink-2); font-size:14px; max-width:70ch}
+  main{max-width:1180px; margin:0 auto; padding:0 24px; display:grid; gap:20px}
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:14px; padding:20px 22px; box-shadow:var(--shadow);
+  }
+  .card h2{font-size:13px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--muted); margin:0 0 14px; font-weight:600;
+    display:flex; align-items:center; gap:8px}
+  .step-n{display:inline-grid; place-items:center; width:20px; height:20px;
+    border-radius:50%; background:var(--accent); color:#fff; font-size:11px; font-weight:700}
+  .card[aria-disabled="true"]{opacity:.5; pointer-events:none}
+
+  /* drop zone */
+  #drop{border:1.5px dashed var(--axis); border-radius:12px; padding:26px;
+    text-align:center; cursor:pointer; transition:.15s; color:var(--ink-2)}
+  #drop.hover{border-color:var(--accent); background:var(--surface-2)}
+  #drop strong{color:var(--ink)}
+  .file-status{margin-top:10px; font-size:13px; color:var(--ink-2)}
+  .file-status.ok{color:var(--good)}
+  .file-status.err{color:#d03b3b}
+
+  label.field{display:block; font-size:13px; color:var(--ink-2); margin-bottom:6px}
+  select,input[type=number]{
+    font:inherit; color:var(--ink); background:var(--surface-2);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; width:100%;
+  }
+  input[type=number]{width:92px; padding:5px 7px}
+  select:focus,input:focus{outline:2px solid var(--accent); outline-offset:0}
+
+  .params{display:flex; flex-wrap:wrap; gap:16px 22px; align-items:flex-end}
+  .params .fld{display:flex; flex-direction:column; gap:4px}
+  .params .fld span{font-size:12px; color:var(--muted)}
+
+  .table-wrap{max-height:420px; overflow:auto; border:1px solid var(--border); border-radius:10px}
+  table{border-collapse:collapse; width:100%; font-size:13px}
+  thead th{position:sticky; top:0; background:var(--surface-2); z-index:1;
+    text-align:left; padding:8px 12px; font-weight:600; color:var(--ink-2);
+    border-bottom:1px solid var(--border); white-space:nowrap}
+  tbody td{padding:5px 12px; border-bottom:1px solid var(--grid)}
+  tbody tr:hover{background:var(--surface-2)}
+  tbody tr.ctrl{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  td.idx{color:var(--muted); font-variant-numeric:tabular-nums; text-align:right}
+  td.tt input{width:74px}
+  .stopname{max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
+  .btn{font:inherit; font-weight:600; border:0; border-radius:9px; padding:11px 20px;
+    background:var(--accent); color:#fff; cursor:pointer; transition:.12s}
+  .btn:hover{filter:brightness(1.06)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .btn.ghost{background:var(--surface-2); color:var(--ink); border:1px solid var(--border)}
+  .toolbar{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:6px}
+  .hint{font-size:12.5px; color:var(--muted)}
+
+  .progress{height:8px; background:var(--surface-2); border-radius:99px; overflow:hidden; margin-top:14px; display:none}
+  .progress.on{display:block}
+  .progress > i{display:block; height:100%; width:0; background:var(--accent); transition:width .2s}
+  .runstat{font-size:13px; color:var(--ink-2); margin-top:8px; font-variant-numeric:tabular-nums}
+
+  .charts{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  @media (max-width:900px){.charts{grid-template-columns:1fr}}
+  .chart-box h3{font-size:14px; margin:0 0 2px}
+  .chart-box p.sub{margin:0 0 10px; font-size:12.5px; color:var(--muted)}
+  svg{display:block; width:100%; height:auto; overflow:visible}
+  .legend{display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-2); margin-top:6px}
+  .legend i{display:inline-block; width:22px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px}
+  .swatch-dot{width:9px;height:9px;border-radius:50%}
+
+  .tt-tip{position:fixed; pointer-events:none; background:var(--ink); color:var(--page);
+    font-size:12px; padding:6px 9px; border-radius:7px; opacity:0; transition:opacity .1s;
+    z-index:10; white-space:nowrap; box-shadow:var(--shadow)}
+
+  .sol-table{margin-top:4px; font-size:12.5px}
+  .sol-table td,.sol-table th{padding:4px 10px}
+  .sol-table tr[data-sel]{cursor:pointer}
+  .sol-table tr.active{background:color-mix(in srgb,var(--accent) 16%,transparent); font-weight:600}
+  .pill{font-size:11px; padding:1px 7px; border-radius:99px; font-weight:600}
+  .pill.none{background:var(--surface-2); color:var(--muted)}
+  .pill.sched{background:color-mix(in srgb,var(--series-1) 22%,transparent); color:var(--ink)}
+  .pill.hdwy{background:color-mix(in srgb,var(--series-2) 26%,transparent); color:var(--ink)}
+  .header-ctrls{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .theme-btn{background:var(--surface-2); border:1px solid var(--border); color:var(--ink);
+    border-radius:8px; padding:7px 12px; cursor:pointer; font:inherit; font-size:13px}
+  select.theme-btn{padding-right:8px}
+  .muted{color:var(--muted)}
+  code{background:var(--surface-2); padding:1px 5px; border-radius:5px; font-size:12.5px}
+</style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Morning Commute Analysis</h1>
-        </header>
+<header>
+  <div class="title">
+    <h1 data-i18n="app.title">Fixed-Line Transit Holding Policy Optimizer</h1>
+    <p data-i18n="app.desc">Load a GTFS feed, pick a route, choose control points and travel-time bounds, then run the
+       worst-case-bunching optimization entirely in your browser. Based on Yuhas et&nbsp;al.,
+       <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA&nbsp;2026).</p>
+  </div>
+  <div class="header-ctrls">
+    <select class="theme-btn" id="lang" aria-label="Language / Idioma" title="Language"></select>
+    <button class="theme-btn" id="theme" data-i18n="btn.theme">◐ Theme</button>
+  </div>
+</header>
 
-        <main>
-            <!-- File Upload Section -->
-            <section class="upload-section">
-                <h2>Upload GTFS Data</h2>
-                <div class="form-group">
-                    <label for="gtfs-file">Select GTFS ZIP File:</label>
-                    <input 
-                        type="file" 
-                        id="gtfs-file" 
-                        accept=".zip" 
-                        required
-                    >
-                </div>
-                <div id="upload-status" class="status-message"></div>
-            </section>
-
-            <!-- Route Selection Section -->
-            <section class="route-section" id="route-section" style="display: none;">
-                <h2>Select Route</h2>
-                <div class="form-group">
-                    <label for="route-select">Route:</label>
-                    <select id="route-select">
-                        <option value="">-- Choose a route --</option>
-                    </select>
-                </div>
-            </section>
-
-            <!-- Stops Configuration Section -->
-            <section class="stops-section" id="stops-section" style="display: none;">
-                <h2>Configure Stops</h2>
-                <div id="stops-container" class="stops-container"></div>
-            </section>
-
-            <!-- Analyze Button -->
-            <section class="analyze-section" id="analyze-section" style="display: none;">
-                <button id="analyze-btn" class="btn-primary">Analyze</button>
-            </section>
-
-            <!-- Results Section -->
-            <section class="results-section" id="results-section" style="display: none;">
-                <h2>Headway Analysis</h2>
-                <div class="chart-container">
-                    <canvas id="headway-chart"></canvas>
-                </div>
-            </section>
-        </main>
+<main>
+  <!-- STEP 1 -->
+  <section class="card" id="card-load">
+    <h2><span class="step-n">1</span> <span data-i18n="step1.title">Load a GTFS feed (.zip)</span></h2>
+    <div id="drop">
+      <span data-i18n="drop.line"><strong>Drop a GTFS .zip here</strong> or click to browse</span><br>
+      <span class="hint" data-i18n="drop.hint">Needs routes.txt, trips.txt, stops.txt, stop_times.txt — parsed locally, nothing is uploaded.</span>
+      <input type="file" id="file" accept=".zip" hidden>
     </div>
+    <div class="file-status" id="fstat"></div>
+  </section>
 
-    <script src="app.js"></script>
+  <!-- STEP 2 -->
+  <section class="card" id="card-route" aria-disabled="true">
+    <h2><span class="step-n">2</span> <span data-i18n="step2.title">Select a route</span></h2>
+    <label class="field" for="route" data-i18n="route.label">Route</label>
+    <select id="route" style="max-width:520px"></select>
+    <div class="hint" id="route-info" style="margin-top:8px"></div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="card" id="card-stops" aria-disabled="true">
+    <h2><span class="step-n">3</span> <span data-i18n="step3.title">Control points &amp; travel-time bounds</span></h2>
+    <div class="toolbar" style="margin-bottom:12px">
+      <strong id="ctrl-count" style="color:var(--accent)">0 control points selected</strong>
+      <button class="btn ghost" id="ctrl-none" data-i18n="ctrl.clear">Clear</button>
+      <button class="btn ghost" id="ctrl-auto" data-i18n="ctrl.auto">Auto-select</button>
+      <span class="hint" data-i18n="ctrl.hint">Tick stops to make them eligible <strong>control points</strong> (where buses may be held) —
+        the optimizer needs at least one to have anything to trade off. Travel times are in
+        <strong>minutes</strong> to the next stop; defaults are seeded from the schedule.</span>
+    </div>
+    <div class="table-wrap">
+      <table id="stops">
+        <thead><tr>
+          <th style="width:44px" data-i18n="th.num">#</th>
+          <th data-i18n="th.stop">Stop</th>
+          <th style="width:90px; text-align:center" data-i18n="th.ctrl">Control point</th>
+          <th style="width:100px" data-i18n="th.min">Min travel (min)</th>
+          <th style="width:100px" data-i18n="th.max">Max travel (min)</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- STEP 4 -->
+  <section class="card" id="card-run" aria-disabled="true">
+    <h2><span class="step-n">4</span> <span data-i18n="step4.title">Optimization settings</span></h2>
+    <div class="params">
+      <label class="fld"><span data-i18n="p.buses">Fleet size (buses)</span><input type="number" id="p-buses" value="16" min="2" step="1"></label>
+      <label class="fld"><span data-i18n="p.hold">Max hold (min)</span><input type="number" id="p-hold" value="5" min="0" step="0.5"></label>
+      <label class="fld"><span data-i18n="p.dmin">Dwell min (min)</span><input type="number" id="p-dmin" value="0" min="0" step="0.1"></label>
+      <label class="fld"><span data-i18n="p.dmax">Dwell max (min)</span><input type="number" id="p-dmax" value="0.5" min="0" step="0.1"></label>
+      <label class="fld"><span data-i18n="p.pop">Population</span><input type="number" id="p-pop" value="24" min="4" step="2"></label>
+      <label class="fld"><span data-i18n="p.gen">Generations</span><input type="number" id="p-gen" value="30" min="1" step="1"></label>
+      <label class="fld"><span data-i18n="p.mut">Mutation %</span><input type="number" id="p-mut" value="12" min="0" max="100" step="1"></label>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="run" data-i18n="run.button">▶ Run optimization</button>
+      <span class="runstat" id="runstat"></span>
+    </div>
+    <div class="progress" id="prog"><i></i></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="card" id="card-results" style="display:none">
+    <h2><span class="step-n">✓</span> <span data-i18n="result.title">Pareto front &amp; worst-case headway</span></h2>
+    <div class="charts">
+      <div class="chart-box">
+        <h3 data-i18n="chart.pareto.title">Pareto front</h3>
+        <p class="sub" data-i18n="chart.pareto.sub">Each point is a non-dominated holding policy. Click one to inspect it →</p>
+        <div id="pareto"></div>
+        <div class="legend">
+          <span><span class="swatch-dot" style="display:inline-block;background:var(--series-1)"></span> <span data-i18n="legend.pareto.point">policy (click to select)</span></span>
+          <span class="muted" data-i18n="legend.pareto.axes">x: total holding effort · y: worst-case max headway (min)</span>
+        </div>
+      </div>
+      <div class="chart-box">
+        <h3 data-i18n="chart.perstop.title">Worst-case headway at every stop</h3>
+        <p class="sub" id="perstop-sub">Selected policy</p>
+        <div id="perstop"></div>
+        <div class="legend">
+          <span><i style="background:var(--series-1)"></i><span data-i18n="legend.ub">Upper bound (worst case)</span></span>
+          <span><i style="background:var(--series-2)"></i><span data-i18n="legend.lb">Lower bound (best case)</span></span>
+          <span><span class="swatch-dot" style="display:inline-block;background:var(--series-1)"></span> <span data-i18n="legend.ctrl">control point</span></span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:18px; overflow:auto">
+      <table class="sol-table" id="soltab">
+        <thead><tr><th data-i18n="soltab.num">#</th><th data-i18n="soltab.headway">Worst-case max headway (min)</th><th data-i18n="soltab.effort">Holding effort</th><th data-i18n="soltab.policies">Control-point policies</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="tt-tip" id="tip"></div>
+
+<script src="translations.js"></script>
+<script>
+"use strict";
+/* ============================================================================
+   Fixed-Line Transit Holding Policy Optimizer — fully client-side.
+
+   Port of the "Ours" method from route_optimization.ipynb:
+     • worst-case headway_bounds() analysis  (analysis/wc_analysis.py)
+     • holding policies                       (analysis/policies.py)
+     • NSGA-II bi-objective GA over control-point policies
+   ========================================================================== */
+
+/* --------------------------------- i18n --------------------------------- */
+// Strings live in translations.js (window.I18N). t(key,{params}) looks up the
+// current language, falls back to the default language, then to the key itself.
+const I18N = window.I18N || { defaultLang: 'en', languages: { en: 'English' }, strings: { en: {} } };
+let LANG = I18N.defaultLang;
+try { const saved = localStorage.getItem('thpo-lang'); if (saved && I18N.languages[saved]) LANG = saved; } catch (e) {}
+
+function t(key, params){
+  const cur = I18N.strings[LANG] || {}, def = I18N.strings[I18N.defaultLang] || {};
+  let s = cur[key] != null ? cur[key] : (def[key] != null ? def[key] : key);
+  if (params) for (const k in params) s = s.split('{' + k + '}').join(params[k]);
+  return s;
+}
+function applyLang(lang){
+  LANG = lang;
+  document.documentElement.setAttribute('lang', lang);
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.getAttribute('data-i18n')); });
+  if (STOPS.length) updateCtrlCount();
+  const rb = document.getElementById('run'); if (rb && !rb.disabled) rb.textContent = t('run.button');
+  if (PARETO.length) selectSolution(SELECTED);
+  try { localStorage.setItem('thpo-lang', lang); } catch (e) {}
+}
+function initI18n(){
+  const sel = document.getElementById('lang');
+  for (const code in I18N.languages){ const o = document.createElement('option'); o.value = code; o.textContent = I18N.languages[code]; sel.appendChild(o); }
+  sel.value = LANG;
+  sel.addEventListener('change', () => applyLang(sel.value));
+  applyLang(LANG);
+}
+
+/* ------------------------------ ZIP reader ------------------------------ */
+async function inflateRaw(bytes){
+  const ds = new DecompressionStream('deflate-raw');
+  const stream = new Response(bytes).body.pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function unzip(buf){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= 0; i--) if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  if (eocd < 0) throw new Error('Not a valid .zip file (no end-of-central-directory record).');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const files = new Map();
+  for (let n = 0; n < count; n++){
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('Corrupt central directory.');
+    const method   = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen  = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commLen  = dv.getUint16(p + 32, true);
+    const localOff = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+    const lhNameLen  = dv.getUint16(localOff + 26, true);
+    const lhExtraLen = dv.getUint16(localOff + 28, true);
+    const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
+    const comp = u8.subarray(dataStart, dataStart + compSize);
+    let data;
+    if (method === 0) data = comp;
+    else if (method === 8) data = await inflateRaw(comp);
+    else throw new Error('Unsupported compression (method ' + method + ') for ' + name);
+    files.set(name, data);
+    p += 46 + nameLen + extraLen + commLen;
+  }
+  return files;
+}
+
+/* ------------------------------ CSV parser ------------------------------ */
+function parseCSV(text){
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let field = '', row = [], inQ = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQ){
+      if (c === '"'){ if (text[i+1] === '"'){ field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c === '\r'){ /* ignore */ }
+    else field += c;
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const header = rows.shift().map(h => h.trim());
+  const out = [];
+  for (const r of rows){
+    if (r.length === 1 && r[0] === '') continue;
+    const o = {};
+    header.forEach((h, i) => o[h] = (r[i] ?? '').trim());
+    out.push(o);
+  }
+  return out;
+}
+
+/* ------------------------------ GTFS model ------------------------------ */
+function timeToMin(s){
+  if (!s) return null;
+  const parts = s.split(':');
+  if (parts.length < 2) return null;
+  const h = +parts[0], m = +parts[1], sec = parts.length > 2 ? +parts[2] : 0;
+  if (!isFinite(h) || !isFinite(m)) return null;
+  return h * 60 + m + sec / 60;
+}
+function textFile(files, base){
+  for (const [name, data] of files) if (name.split('/').pop().toLowerCase() === base) return new TextDecoder().decode(data);
+  throw new Error('Missing ' + base + ' in the GTFS feed.');
+}
+
+let GTFS = null; // {routes, tripsByRoute, stopTimesByTrip, stopName}
+
+async function loadGtfs(buf){
+  const files = await unzip(buf);
+  const routes = parseCSV(textFile(files, 'routes.txt'));
+  const trips  = parseCSV(textFile(files, 'trips.txt'));
+  const stops  = parseCSV(textFile(files, 'stops.txt'));
+  const stimes = parseCSV(textFile(files, 'stop_times.txt'));
+
+  const stopName = new Map(stops.map(s => [s.stop_id, s.stop_name || s.stop_id]));
+
+  // stop_times grouped by trip, ordered by stop_sequence
+  const byTrip = new Map();
+  for (const st of stimes){
+    if (!byTrip.has(st.trip_id)) byTrip.set(st.trip_id, []);
+    byTrip.get(st.trip_id).push({
+      stop_id: st.stop_id,
+      seq: +st.stop_sequence,
+      dep: timeToMin(st.departure_time || st.arrival_time),
+    });
+  }
+  for (const arr of byTrip.values()) arr.sort((a, b) => a.seq - b.seq);
+
+  const tripsByRoute = new Map();
+  for (const t of trips){
+    if (!tripsByRoute.has(t.route_id)) tripsByRoute.set(t.route_id, []);
+    tripsByRoute.get(t.route_id).push(t);
+  }
+  GTFS = { routes, tripsByRoute, stopTimesByTrip: byTrip, stopName };
+  return GTFS;
+}
+
+// Build an ordered stop list for a route (dominant pattern per direction, concatenated)
+function buildRoute(routeId){
+  const trips = GTFS.tripsByRoute.get(routeId) || [];
+  const byTrip = GTFS.stopTimesByTrip;
+
+  const patByDir = new Map();      // dir -> Map(key -> {count, seq})
+  for (const t of trips){
+    const st = byTrip.get(t.trip_id);
+    if (!st || st.length < 2) continue;
+    const seq = st.map(x => x.stop_id);
+    const key = seq.join('>');
+    const dir = t.direction_id || '0';
+    if (!patByDir.has(dir)) patByDir.set(dir, new Map());
+    const m = patByDir.get(dir);
+    if (!m.has(key)) m.set(key, { count: 0, seq });
+    m.get(key).count++;
+  }
+  const chosen = [];
+  for (const dir of [...patByDir.keys()].sort()){
+    let best = null;
+    for (const v of patByDir.get(dir).values()) if (!best || v.count > best.count) best = v;
+    if (best) chosen.push(best.seq);
+  }
+  let ordered = [];
+  if (chosen.length > 1) for (const seq of chosen) ordered.push(...seq.slice(0, -1)); // drop shared terminal
+  else if (chosen.length === 1) ordered = chosen[0].slice();
+
+  // seed default travel times (min) from scheduled consecutive gaps across all trips
+  const travelByPair = new Map();
+  for (const t of trips){
+    const st = byTrip.get(t.trip_id);
+    if (!st) continue;
+    for (let k = 0; k + 1 < st.length; k++){
+      if (st[k].dep == null || st[k+1].dep == null) continue;
+      const dt = st[k+1].dep - st[k].dep;
+      if (dt <= 0) continue;
+      const key = st[k].stop_id + '>' + st[k+1].stop_id;
+      if (!travelByPair.has(key)) travelByPair.set(key, []);
+      travelByPair.get(key).push(dt);
+    }
+  }
+  return ordered.map((sid, i) => {
+    const next = ordered[(i + 1) % ordered.length];
+    const arr = travelByPair.get(sid + '>' + next) || [];
+    let mn, mx;
+    if (arr.length){ mn = Math.min(...arr); mx = Math.max(...arr); if (mx <= mn) mx = mn + Math.max(0.5, mn * 0.5); }
+    else { mn = 2; mx = 4; }
+    return { stop_id: sid, name: GTFS.stopName.get(sid) || sid,
+             tauMin: +mn.toFixed(2), tauMax: +mx.toFixed(2), isControl: false };
+  });
+}
+
+/* --------------------------- Holding policies --------------------------- */
+// policyCfg = {type:0|1|2, args:{}}; type 0 none, 1 schedule-driven, 2 headway-driven
+function makePolicy(cfg){
+  if (cfg.type === 1){
+    let next = cfg.args.offset;
+    const dt = cfg.args.time_delta;
+    return { hold(t){ const h = Math.max(0, next - t); next += dt; return h; } };
+  }
+  if (cfg.type === 2){
+    const { activation_ratio, max_holding } = cfg.args;
+    return { hold(t, dLead, aFoll){
+      if (dLead == null || aFoll == null) return 0;
+      const headway = t - dLead, tailway = aFoll - t;
+      if (tailway === 0) return 0;
+      if (headway / tailway < activation_ratio) return Math.min(Math.max(0, (aFoll + dLead - 2 * t) / 2), max_holding);
+      return 0;
+    } };
+  }
+  return { hold(){ return 0; } }; // none
+}
+
+/* ---------------- Worst-case headway bounds (wc_analysis.py) ------------ */
+function headwayBounds(route, startTimes, tMax){
+  const M = startTimes.length, N = route.length;
+  const pol = route.map(s => makePolicy(s.policyCfg));
+  const clamp = (x, lo, hi) => Math.min(Math.max(lo, x), hi);
+
+  let sumMax = 0, sumMin = 0;
+  for (const s of route){ sumMax += s.tau[1] + s.delta[1]; sumMin += s.tau[0] + s.delta[0]; }
+
+  const htub = new Array(N).fill(-Infinity);
+  const htlb = new Array(N).fill(Infinity);
+  const carryIn = new Array(N).fill(null);
+  const arr = Array.from({ length: N }, () => []);
+  const dep = Array.from({ length: N }, () => []);
+  dep[0] = startTimes.slice();
+
+  let i = 0, converged = false, guard = 0;
+  const GUARD = 200_000; // safety net against non-advancing (e.g. all-zero travel) inputs
+  while (!converged && dep[i][dep[i].length - 1] < tMax){
+    if (++guard > GUARD) break;
+    const ip = i; i = (i + 1) % N;
+    const sp = route[ip], s = route[i];
+    const tpMin = sp.tau[0], tpMax = sp.tau[1];
+
+    arr[i] = [ dep[ip][0] + tpMax ];
+    for (let j = 1; j < M; j++)
+      arr[i].push(dep[ip][j] + clamp(arr[i][j-1] - dep[ip][j], tpMin, tpMax));
+
+    const dMin = s.delta[0], dMax = s.delta[1];
+    dep[i] = [];
+    { // lead vehicle
+      const aFoll = M > 1 ? dep[ip][1] + tpMax : dep[ip][0] + sumMax;
+      const hold = pol[i].hold(arr[i][0], carryIn[i], aFoll);
+      dep[i].push(arr[i][0] + Math.max(dMax, hold));
+    }
+    for (let j = 1; j < M; j++){
+      const aFoll = (j + 1 < M) ? dep[ip][j+1] + tpMin : dep[i][0] + sumMin;
+      const delta = clamp(dep[i][j-1] - arr[i][j], dMin, dMax);
+      const hold = pol[i].hold(arr[i][j], dep[i][j-1], aFoll);
+      dep[i].push(arr[i][j] + Math.max(delta, hold));
+    }
+
+    if (carryIn[i] !== null){
+      const cand = Math.max(0, arr[i][0] - carryIn[i]);
+      if (cand > htub[i]) htub[i] = cand; else converged = true;
+    }
+    const lb = Math.max(0, arr[i][1] - dep[i][0]);
+    if (lb < htlb[i]) htlb[i] = lb;
+    carryIn[i] = dep[i][dep[i].length - 1];
+  }
+  return { htub, htlb };
+}
+
+/* ------------------------------ NSGA-II --------------------------------- */
+// Objectives are MINIMIZED: [worst-case max headway, holding effort]
+function dominates(a, b){
+  let better = false;
+  for (let k = 0; k < a.length; k++){ if (a[k] > b[k]) return false; if (a[k] < b[k]) better = true; }
+  return better;
+}
+function nonDominatedSort(pop){
+  const fronts = [[]];
+  const S = pop.map(() => []), n = pop.map(() => 0);
+  pop.forEach((p, i) => { p.rank = 0; });
+  for (let i = 0; i < pop.length; i++){
+    for (let j = 0; j < pop.length; j++){
+      if (i === j) continue;
+      if (dominates(pop[i].obj, pop[j].obj)) S[i].push(j);
+      else if (dominates(pop[j].obj, pop[i].obj)) n[i]++;
+    }
+    if (n[i] === 0){ pop[i].rank = 0; fronts[0].push(i); }
+  }
+  let f = 0;
+  while (fronts[f].length){
+    const next = [];
+    for (const i of fronts[f]) for (const j of S[i]) if (--n[j] === 0){ pop[j].rank = f + 1; next.push(j); }
+    f++; fronts.push(next);
+  }
+  fronts.pop();
+  return fronts;
+}
+function crowding(front, pop){
+  const L = front.length;
+  for (const i of front) pop[i].crowd = 0;
+  if (L === 0) return;
+  const m = pop[front[0]].obj.length;
+  for (let k = 0; k < m; k++){
+    const ord = [...front].sort((a, b) => pop[a].obj[k] - pop[b].obj[k]);
+    pop[ord[0]].crowd = pop[ord[L-1]].crowd = Infinity;
+    const span = pop[ord[L-1]].obj[k] - pop[ord[0]].obj[k] || 1;
+    for (let t = 1; t < L - 1; t++)
+      pop[ord[t]].crowd += (pop[ord[t+1]].obj[k] - pop[ord[t-1]].obj[k]) / span;
+  }
+}
+function tournament(pop){
+  const a = pop[(Math.random() * pop.length) | 0], b = pop[(Math.random() * pop.length) | 0];
+  if (a.rank !== b.rank) return a.rank < b.rank ? a : b;
+  return (a.crowd || 0) > (b.crowd || 0) ? a : b;
+}
+
+/* --------------------------- Optimizer driver --------------------------- */
+let STOPS = [];   // current route stop configs (from UI)
+let CTRL = [];    // indices of control points
+let PARETO = [];  // result solutions
+
+function randGene(space){
+  return space.kind === 'int'
+    ? space.values[(Math.random() * space.values.length) | 0]
+    : space.low + Math.random() * (space.high - space.low);
+}
+
+async function optimize(cfg, onProgress){
+  const N_BUSES = cfg.buses, MAX_HOLD = cfg.maxHold, T_MAX = 60 * 24;
+  const route0 = STOPS.map(s => ({
+    tau: [s.tauMin, s.tauMax], delta: [cfg.dMin, cfg.dMax],
+    isControl: s.isControl, policyCfg: { type: 0, args: {} },
+  }));
+
+  let MIN_TRAVEL = 0, MAX_TRAVEL = MAX_HOLD;
+  for (const s of route0){ MIN_TRAVEL += s.tau[0] + s.delta[0]; MAX_TRAVEL += s.tau[1] + s.delta[1]; }
+  MIN_TRAVEL = Math.max(MIN_TRAVEL, 1e-6);
+
+  // cumulative min/max travel+dwell up to & including each control point
+  const ctrlIdx = route0.map((s, i) => s.isControl ? i : -1).filter(i => i >= 0);
+  const MIN_CTRL = [], MAX_CTRL = [];
+  let accMin = 0, accMax = 0, c = 0;
+  for (let i = 0; i < route0.length; i++){
+    accMin += route0[i].tau[0] + route0[i].delta[0];
+    accMax += route0[i].tau[1] + route0[i].delta[1];
+    if (route0[i].isControl){ MIN_CTRL[c] = accMin; MAX_CTRL[c] = accMax + MAX_HOLD; c++; }
+  }
+
+  // Headway range = round-trip time / fleet size (min ↔ max travel).
+  // NOTE: the RTCSA notebook uses the reciprocal ratio (N_BUSES / TRAVEL); on any
+  // real multi-stop route that makes the release headway ~0.1 min, so every bus
+  // launches together and holding can never help (the Pareto front collapses to
+  // one point). TRAVEL / N_BUSES is the physically correct headway and is what
+  // makes the technique produce a real trade-off curve.
+  const HW_LO = MIN_TRAVEL / N_BUSES, HW_HI = MAX_TRAVEL / N_BUSES;
+
+  // gene space: [initial-headway, (policy,arg1,arg2) per control point]
+  const space = [{ kind: 'float', low: HW_LO, high: HW_HI }];
+  for (let k = 0; k < ctrlIdx.length; k++){
+    space.push({ kind: 'int', values: [0, 1, 2] });
+    space.push({ kind: 'float', low: 0, high: 1 });
+    space.push({ kind: 'float', low: 0, high: 1 });
+  }
+
+  function decode(g){
+    const route = route0.map(s => ({ tau: s.tau, delta: s.delta, policyCfg: { type: 0, args: {} } }));
+    let hold = 0;
+    for (let k = 0; k < ctrlIdx.length; k++){
+      const p = g[1 + 3*k], a1 = g[2 + 3*k], a2 = g[3 + 3*k], si = ctrlIdx[k];
+      if (p === 1){
+        const time_delta = HW_LO * (1 - a1) + a1 * HW_HI;
+        const offset = MIN_CTRL[k] * (1 - a2) + a2 * MAX_CTRL[k];
+        route[si].policyCfg = { type: 1, args: { time_delta, offset } };
+        hold += (N_BUSES - 1) * (HW_LO * (1 - a1) + a1 * HW_HI);
+      } else if (p === 2){
+        route[si].policyCfg = { type: 2, args: { activation_ratio: a1, max_holding: a2 * MAX_HOLD } };
+        hold += a2;
+      }
+    }
+    return { route, hold };
+  }
+  function evaluate(g){
+    const { route, hold } = decode(g);
+    const start = Array.from({ length: N_BUSES }, (_, b) => b * g[0]);
+    const { htub, htlb } = headwayBounds(route, start, T_MAX);
+    const finite = htub.filter(v => isFinite(v));
+    const worst = finite.length ? Math.max(...finite) : Infinity;
+    return { genes: g, obj: [worst, hold], htub, htlb };
+  }
+
+  const POP = cfg.pop, GEN = cfg.gen, MUT = cfg.mut / 100;
+  let pop = [];
+  for (let i = 0; i < POP; i++) pop.push(evaluate(space.map(randGene)));
+
+  const makeChild = () => {
+    const p1 = tournament(pop).genes, p2 = tournament(pop).genes;
+    const cut = 1 + ((Math.random() * (space.length - 1)) | 0);
+    const child = p1.slice(0, cut).concat(p2.slice(cut));
+    for (let k = 0; k < child.length; k++) if (Math.random() < MUT) child[k] = randGene(space[k]);
+    return child;
+  };
+
+  let bestWorst = Infinity, stale = 0;
+  nonDominatedSort(pop).forEach(fr => crowding(fr, pop));
+
+  for (let gen = 0; gen < GEN; gen++){
+    const offspring = [];
+    for (let i = 0; i < POP; i++) offspring.push(evaluate(makeChild()));
+    const R = pop.concat(offspring);
+    const fronts = nonDominatedSort(R);
+    const next = [];
+    for (const fr of fronts){
+      crowding(fr, R);
+      if (next.length + fr.length <= POP){ for (const i of fr) next.push(R[i]); }
+      else {
+        const sorted = [...fr].sort((a, b) => (R[b].crowd || 0) - (R[a].crowd || 0));
+        for (const i of sorted){ if (next.length >= POP) break; next.push(R[i]); }
+        break;
+      }
+    }
+    pop = next;
+    nonDominatedSort(pop).forEach(fr => crowding(fr, pop));
+
+    const curBest = Math.min(...pop.map(p => p.obj[0]).filter(isFinite));
+    if (curBest < bestWorst - 1e-9){ bestWorst = curBest; stale = 0; } else stale++;
+    onProgress((gen + 1) / GEN, gen + 1, bestWorst);
+    await new Promise(r => setTimeout(r));
+    if (stale >= 5) break; // saturate_5
+  }
+
+  // final Pareto front (rank 0), de-duplicated, sorted by holding effort
+  const fronts = nonDominatedSort(pop);
+  const seen = new Set();
+  const front = fronts[0]
+    .map(i => pop[i])
+    .filter(p => isFinite(p.obj[0]))
+    .filter(p => { const key = p.obj[0].toFixed(4) + '|' + p.obj[1].toFixed(4); if (seen.has(key)) return false; seen.add(key); return true; })
+    .sort((a, b) => a.obj[1] - b.obj[1]);
+  return { front, ctrlIdx };
+}
+
+/* ------------------------------- Charts --------------------------------- */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs){ const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function niceTicks(min, max, n){
+  const span = (max - min) || 1, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag, step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const t = []; for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step) t.push(+v.toFixed(6));
+  return t;
+}
+const tip = document.getElementById('tip');
+function showTip(evt, html){ tip.innerHTML = html; tip.style.opacity = 1; tip.style.left = (evt.clientX + 12) + 'px'; tip.style.top = (evt.clientY + 12) + 'px'; }
+function hideTip(){ tip.style.opacity = 0; }
+
+function drawPareto(front, onSelect, selectedIdx){
+  const W = 460, H = 320, m = { t: 14, r: 18, b: 46, l: 56 };
+  const xs = front.map(p => p.obj[1]), ys = front.map(p => p.obj[0]);
+  let xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(...ys), ymax = Math.max(...ys);
+  if (xmin === xmax){ xmin -= 1; xmax += 1; } if (ymin === ymax){ ymin -= 1; ymax += 1; }
+  const px = v => m.l + (v - xmin) / (xmax - xmin) * (W - m.l - m.r);
+  const py = v => H - m.b - (v - ymin) / (ymax - ymin) * (H - m.t - m.b);
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
+  // grid + axes
+  for (const gx of niceTicks(xmin, xmax, 5)){
+    svg.appendChild(el('line', { x1: px(gx), y1: m.t, x2: px(gx), y2: H - m.b, stroke: 'var(--grid)', 'stroke-width': 1 }));
+    const tx = el('text', { x: px(gx), y: H - m.b + 16, fill: 'var(--muted)', 'font-size': 11, 'text-anchor': 'middle' }); tx.textContent = (+gx.toFixed(2)); svg.appendChild(tx);
+  }
+  for (const gy of niceTicks(ymin, ymax, 5)){
+    svg.appendChild(el('line', { x1: m.l, y1: py(gy), x2: W - m.r, y2: py(gy), stroke: 'var(--grid)', 'stroke-width': 1 }));
+    const ty = el('text', { x: m.l - 8, y: py(gy) + 4, fill: 'var(--muted)', 'font-size': 11, 'text-anchor': 'end' }); ty.textContent = (+gy.toFixed(1)); svg.appendChild(ty);
+  }
+  // step line connecting front
+  let d = '';
+  front.forEach((p, i) => { d += (i ? 'L' : 'M') + px(p.obj[1]) + ' ' + py(p.obj[0]) + ' '; });
+  svg.appendChild(el('path', { d, fill: 'none', stroke: 'var(--series-1)', 'stroke-width': 2, 'stroke-opacity': .35 }));
+  // points
+  front.forEach((p, i) => {
+    const dot = el('circle', { cx: px(p.obj[1]), cy: py(p.obj[0]), r: i === selectedIdx ? 7 : 5,
+      fill: 'var(--series-1)', stroke: 'var(--surface)', 'stroke-width': 2, cursor: 'pointer' });
+    dot.addEventListener('mouseenter', e => showTip(e, t('tip.pareto', { i: i + 1, headway: p.obj[0].toFixed(2), effort: p.obj[1].toFixed(2) })));
+    dot.addEventListener('mousemove', e => showTip(e, tip.innerHTML));
+    dot.addEventListener('mouseleave', hideTip);
+    dot.addEventListener('click', () => onSelect(i));
+    svg.appendChild(dot);
+  });
+  // axis labels
+  const xl = el('text', { x: (m.l + W - m.r) / 2, y: H - 6, fill: 'var(--ink-2)', 'font-size': 12, 'text-anchor': 'middle' }); xl.textContent = t('chart.axis.effort'); svg.appendChild(xl);
+  const yl = el('text', { x: 14, y: (m.t + H - m.b) / 2, fill: 'var(--ink-2)', 'font-size': 12, 'text-anchor': 'middle', transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` }); yl.textContent = t('chart.axis.headwayMax'); svg.appendChild(yl);
+
+  const box = document.getElementById('pareto'); box.innerHTML = ''; box.appendChild(svg);
+}
+
+function drawPerStop(sol, ctrlIdx){
+  const W = 460, H = 320, m = { t: 14, r: 16, b: 54, l: 52 };
+  const ub = sol.htub.map(v => isFinite(v) ? v : null);
+  const lb = sol.htlb.map(v => isFinite(v) ? v : null);
+  const N = ub.length;
+  const vals = ub.concat(lb).filter(v => v != null);
+  let ymin = Math.min(0, ...vals), ymax = Math.max(...vals, 1);
+  const px = i => m.l + (N <= 1 ? 0 : i / (N - 1)) * (W - m.l - m.r);
+  const py = v => H - m.b - (v - ymin) / (ymax - ymin) * (H - m.t - m.b);
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img' });
+  for (const gy of niceTicks(ymin, ymax, 5)){
+    svg.appendChild(el('line', { x1: m.l, y1: py(gy), x2: W - m.r, y2: py(gy), stroke: 'var(--grid)', 'stroke-width': 1 }));
+    const t = el('text', { x: m.l - 8, y: py(gy) + 4, fill: 'var(--muted)', 'font-size': 11, 'text-anchor': 'end' }); t.textContent = +gy.toFixed(1); svg.appendChild(t);
+  }
+  const path = arr => { let d = '', started = false; arr.forEach((v, i) => { if (v == null){ started = false; return; } d += (started ? 'L' : 'M') + px(i) + ' ' + py(v) + ' '; started = true; }); return d; };
+  svg.appendChild(el('path', { d: path(lb), fill: 'none', stroke: 'var(--series-2)', 'stroke-width': 2, 'stroke-opacity': .9 }));
+  svg.appendChild(el('path', { d: path(ub), fill: 'none', stroke: 'var(--series-1)', 'stroke-width': 2.5 }));
+
+  const ctrlSet = new Set(ctrlIdx);
+  ub.forEach((v, i) => {
+    if (v == null) return;
+    const isC = ctrlSet.has(i);
+    const dot = el('circle', { cx: px(i), cy: py(v), r: isC ? 4.5 : 2, fill: 'var(--series-1)',
+      stroke: 'var(--surface)', 'stroke-width': isC ? 1.5 : 0, cursor: 'pointer' });
+    const name = STOPS[i] ? STOPS[i].name : ('stop ' + i);
+    dot.addEventListener('mouseenter', e => showTip(e, `${name}${isC ? t('tip.controlTag') : ''}<br>` + t('tip.perstopVals', { worst: v.toFixed(2), best: lb[i] != null ? lb[i].toFixed(2) : '—' })));
+    dot.addEventListener('mousemove', e => showTip(e, tip.innerHTML));
+    dot.addEventListener('mouseleave', hideTip);
+    svg.appendChild(dot);
+  });
+  const xl = el('text', { x: (m.l + W - m.r) / 2, y: H - 8, fill: 'var(--ink-2)', 'font-size': 12, 'text-anchor': 'middle' }); xl.textContent = t('chart.axis.stopIndex', { n: N - 1 }); svg.appendChild(xl);
+  const yl = el('text', { x: 13, y: (m.t + H - m.b) / 2, fill: 'var(--ink-2)', 'font-size': 12, 'text-anchor': 'middle', transform: `rotate(-90 13 ${(m.t + H - m.b) / 2})` }); yl.textContent = t('chart.axis.headway'); svg.appendChild(yl);
+
+  const box = document.getElementById('perstop'); box.innerHTML = ''; box.appendChild(svg);
+}
+
+/* ------------------------------- UI wiring ------------------------------ */
+const $ = s => document.querySelector(s);
+function enable(id, on){ const c = document.getElementById(id); c.setAttribute('aria-disabled', on ? 'false' : 'true'); }
+
+function updateCtrlCount(){
+  const n = STOPS.filter(s => s.isControl).length;
+  const el = $('#ctrl-count');
+  el.textContent = t(n === 1 ? 'ctrl.countOne' : 'ctrl.countMany', { n });
+  el.style.color = n ? 'var(--accent)' : '#d03b3b';
+}
+// Evenly-spaced default control points so a freshly loaded route gives a real front.
+function autoSelectCtrl(){
+  STOPS.forEach(s => s.isControl = false);
+  const n = Math.min(6, Math.max(2, Math.floor(STOPS.length / 12)));
+  if (STOPS.length > 3)
+    for (let k = 1; k <= n; k++){ const i = Math.round(k * STOPS.length / (n + 1)); if (STOPS[i]) STOPS[i].isControl = true; }
+}
+
+// theme toggle
+$('#theme').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const isDark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  if (PARETO.length) selectSolution(SELECTED);
+});
+
+// file loading
+const drop = $('#drop'), fileInput = $('#file'), fstat = $('#fstat');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('hover'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+async function handleFile(file){
+  fstat.className = 'file-status'; fstat.textContent = t('status.reading', { file: file.name });
+  try {
+    await loadGtfs(await file.arrayBuffer());
+    populateRoutes();
+    fstat.className = 'file-status ok';
+    fstat.textContent = t('status.loaded', { file: file.name, routes: GTFS.routes.length, trips: GTFS.stopTimesByTrip.size });
+    enable('card-route', true);
+  } catch (err){
+    fstat.className = 'file-status err'; fstat.textContent = '✗ ' + err.message;
+    console.error(err);
+  }
+}
+
+function routeLabel(r){
+  const bits = [r.route_short_name, r.route_long_name].filter(Boolean);
+  return (bits.join(' — ') || r.route_id);
+}
+function populateRoutes(){
+  const sel = $('#route'); sel.innerHTML = '';
+  const routes = [...GTFS.routes].sort((a, b) => routeLabel(a).localeCompare(routeLabel(b), undefined, { numeric: true }));
+  for (const r of routes){
+    const o = document.createElement('option'); o.value = r.route_id; o.textContent = routeLabel(r); sel.appendChild(o);
+  }
+  sel.onchange = () => selectRoute(sel.value);
+  if (routes.length) selectRoute(routes[0].route_id);
+}
+
+function selectRoute(routeId){
+  STOPS = buildRoute(routeId);
+  autoSelectCtrl();
+  $('#route-info').textContent = STOPS.length ? t('route.info', { n: STOPS.length }) : t('route.none');
+  renderStops();
+  enable('card-stops', STOPS.length > 0);
+  enable('card-run', STOPS.length > 0);
+  $('#card-results').style.display = 'none';
+}
+
+function renderStops(){
+  const tb = $('#stops tbody'); tb.innerHTML = '';
+  STOPS.forEach((s, i) => {
+    const tr = document.createElement('tr'); if (s.isControl) tr.className = 'ctrl';
+    tr.innerHTML =
+      `<td class="idx">${i}</td>` +
+      `<td class="stopname" title="${s.name}">${s.name}</td>` +
+      `<td style="text-align:center"><input type="checkbox" ${s.isControl ? 'checked' : ''}></td>` +
+      `<td class="tt"><input type="number" step="0.1" min="0" value="${s.tauMin}"></td>` +
+      `<td class="tt"><input type="number" step="0.1" min="0" value="${s.tauMax}"></td>`;
+    const [chk, mn, mx] = tr.querySelectorAll('input');
+    chk.addEventListener('change', () => { s.isControl = chk.checked; tr.classList.toggle('ctrl', chk.checked); updateCtrlCount(); });
+    mn.addEventListener('change', () => s.tauMin = Math.max(0, +mn.value || 0));
+    mx.addEventListener('change', () => s.tauMax = Math.max(s.tauMin, +mx.value || 0));
+    tb.appendChild(tr);
+  });
+  updateCtrlCount();
+}
+$('#ctrl-none').addEventListener('click', () => { STOPS.forEach(s => s.isControl = false); renderStops(); });
+$('#ctrl-auto').addEventListener('click', () => { autoSelectCtrl(); renderStops(); });
+
+// run
+let SELECTED = 0;
+$('#run').addEventListener('click', run);
+async function run(){
+  const ctrlCount = STOPS.filter(s => s.isControl).length;
+  if (!ctrlCount){ if (!confirm(t('confirm.noCtrl'))) return; }
+  const cfg = {
+    buses: Math.max(2, +$('#p-buses').value | 0),
+    maxHold: Math.max(0, +$('#p-hold').value || 0),
+    dMin: Math.max(0, +$('#p-dmin').value || 0),
+    dMax: Math.max(0, +$('#p-dmax').value || 0),
+    pop: Math.max(4, +$('#p-pop').value | 0),
+    gen: Math.max(1, +$('#p-gen').value | 0),
+    mut: Math.max(0, Math.min(100, +$('#p-mut').value || 0)),
+  };
+  if (cfg.dMax < cfg.dMin) cfg.dMax = cfg.dMin;
+
+  const btn = $('#run'); btn.disabled = true; btn.textContent = t('run.running');
+  const prog = $('#prog'); prog.classList.add('on');
+  const bar = prog.firstElementChild, stat = $('#runstat');
+  const t0 = performance.now();
+  try {
+    const { front, ctrlIdx } = await optimize(cfg, (frac, gen, best) => {
+      bar.style.width = (frac * 100) + '%';
+      stat.textContent = t('run.progress', { gen, best: isFinite(best) ? best.toFixed(2) + ' min' : '—' });
+    });
+    PARETO = front; window.__CTRL = ctrlIdx;
+    if (!front.length){ stat.textContent = t('run.infeasible'); }
+    else {
+      renderResults(front, ctrlIdx);
+      stat.textContent = t('run.done', { sec: ((performance.now() - t0) / 1000).toFixed(1), n: front.length });
+    }
+  } catch (err){
+    stat.textContent = '✗ ' + err.message; console.error(err);
+  } finally {
+    btn.disabled = false; btn.textContent = t('run.button'); prog.classList.remove('on');
+  }
+}
+
+function policyPills(sol, ctrlIdx){
+  const spans = [];
+  ctrlIdx.forEach((si, k) => {
+    const p = sol.genes[1 + 3*k];
+    const name = STOPS[si] ? STOPS[si].name : ('stop ' + si);
+    const cls = p === 0 ? 'none' : p === 1 ? 'sched' : 'hdwy';
+    const lab = p === 0 ? t('policy.none') : p === 1 ? t('policy.schedule') : t('policy.headway');
+    spans.push(`<span class="pill ${cls}" title="${name}">${lab}</span>`);
+  });
+  return spans.join(' ') || ('<span class="muted">' + t('policy.releaseOnly') + '</span>');
+}
+
+function renderResults(front, ctrlIdx){
+  $('#card-results').style.display = '';
+  SELECTED = 0;
+  // solution table
+  const tb = $('#soltab tbody'); tb.innerHTML = '';
+  front.forEach((s, i) => {
+    const tr = document.createElement('tr'); tr.dataset.sel = i;
+    tr.innerHTML = `<td>${i+1}</td><td>${s.obj[0].toFixed(2)}</td><td>${s.obj[1].toFixed(2)}</td><td>${policyPills(s, ctrlIdx)}</td>`;
+    tr.addEventListener('click', () => selectSolution(i));
+    tb.appendChild(tr);
+  });
+  selectSolution(0);
+}
+function selectSolution(i){
+  SELECTED = i;
+  const ctrlIdx = window.__CTRL || [];
+  drawPareto(PARETO, selectSolution, i);
+  drawPerStop(PARETO[i], ctrlIdx);
+  $('#perstop-sub').innerHTML = t('result.selected', { i: i + 1, headway: PARETO[i].obj[0].toFixed(2), effort: PARETO[i].obj[1].toFixed(2) });
+  document.querySelectorAll('#soltab tbody tr').forEach((tr, k) => tr.classList.toggle('active', k === i));
+}
+
+// Populate the language selector and translate the page.
+initI18n();
+</script>
 </body>
 </html>
