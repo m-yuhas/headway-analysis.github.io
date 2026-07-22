@@ -12,7 +12,7 @@ window.I18N = {
 
     en: {
       'app.title': 'Fixed-Line Transit Holding Policy Optimizer',
-      'app.desc': 'Load a GTFS feed, pick a route, choose control points and travel-time bounds, then run the fixed-line transit route optimization. Based on Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA 2026).',
+      'app.desc': 'Load a GTFS feed, pick a route, choose control points and travel-time bounds, then run the fixed-line transit route optimization. You can find many transit agencies\' GTFS feeds online in the <a href="https://mobilitydatabase.org/">Mobility Database</a>.  The worst-case headway computation in this demo is based on <a href="https://arxiv.org/abs/2606.12855">Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA 2026)</a>.',
       'btn.theme': '◐ Theme',
 
       'step1.title': 'Load a GTFS feed (.zip)',
@@ -83,7 +83,7 @@ window.I18N = {
 
     es: {
       'app.title': 'Optimizador de Políticas de Retención para Transporte de Línea Fija',
-      'app.desc': 'Cargue un feed GTFS, elija una ruta, seleccione puntos de control y límites de tiempo de viaje, y ejecute la optimización. Basado en Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA 2026).',
+      'app.desc': 'Cargue un feed GTFS, elija una ruta, seleccione puntos de control y límites de tiempo de viaje, y ejecute la optimización. Puede encontrar los feeds GTFS de muchas agencias de transporte público en línea en la <a href="https://mobilitydatabase.org/">Base de Datos de Movilidad</a>.  La computación del intervalo más peor en esta demonstración se basa en <a href="https://arxiv.org/abs/2606.12855">Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA 2026)</a>.',
       'btn.theme': '◐ Tema',
 
       'step1.title': 'Cargar un feed GTFS (.zip)',
@@ -154,7 +154,7 @@ window.I18N = {
 
     zh: {
       'app.title': '定线交通等待策略优化',
-      'app.desc': '上载一个GTFS来源、选择一条线、挑选控制站与行驶时间极限。以后举行定线交通等待策略优化。依傍Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> （RTCSA 2026）。',
+      'app.desc': '上载一个GTFS来源、选择一条线、挑选控制站与行驶时间极限。以后举行定线交通等待策略优化。若需要一个GTFS来源请在<a href="https://mobilitydatabase.org/">移动性数据库</a>搜索。本操演的计算最坏班距时间方法依傍<a href="https://arxiv.org/abs/2606.12855">Yuhas et al., <em>Computing Headway Bounds under Worst-Case Bunching</em> (RTCSA 2026)</a>。',
       'btn.theme': '◐ 主题包',
 
       'step1.title': '上载GTFS来源(.zip)',
